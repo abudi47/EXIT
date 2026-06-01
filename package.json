@@ -1,0 +1,10 @@
+{
+  "name": "se-exit-mern",
+  "private": true,
+  "description": "SE Exit Exam study platform — Vercel deploy root",
+  "scripts": {
+    "build": "npm run build --prefix client",
+    "dev:client": "npm run dev --prefix client",
+    "dev:server": "npm run dev --prefix server"
+  }
+}
