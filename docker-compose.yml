@@ -1,0 +1,12 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: se-exit-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - se_exit_mongo_data:/data/db
+
+volumes:
+  se_exit_mongo_data:
