@@ -34,13 +34,27 @@ export function createApp() {
   app.use(cors());
   app.use(express.json({ limit: "4mb" }));
 
+  // Vercel mounts this app at /api — paths arrive as /subjects, not /api/subjects.
+  app.use((req, _res, next) => {
+    const url = req.url || "/";
+    const q = url.includes("?") ? url.slice(url.indexOf("?")) : "";
+    const path = url.split("?")[0] || "/";
+    if (!path.startsWith("/api")) {
+      req.url = `/api${path.startsWith("/") ? path : `/${path}`}${q}`;
+    }
+    next();
+  });
+
   app.use(async (_req, res, next) => {
     try {
       await connectDb();
       next();
     } catch (e) {
       console.error("✗ MongoDB:", e.message);
-      res.status(503).json({ error: "database unavailable" });
+      const hint = !process.env.MONGO_URI?.trim()
+        ? "Set MONGO_URI in Vercel → Settings → Environment Variables, then redeploy."
+        : e.message;
+      res.status(503).json({ error: "database unavailable", hint });
     }
   });
 

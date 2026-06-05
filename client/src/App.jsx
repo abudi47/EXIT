@@ -24,10 +24,29 @@ export default function App() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    api
-      .subjects()
-      .then(setSubjects)
-      .catch(() => setError("Could not reach the API. Is the server running on :4000?"));
+    (async () => {
+      try {
+        setSubjects(await api.subjects());
+        setError(null);
+      } catch {
+        let msg = "Could not load subjects from the API.";
+        try {
+          const r = await fetch("/api/health");
+          const body = await r.json().catch(() => ({}));
+          if (r.status === 503 || body.error === "database unavailable") {
+            msg =
+              "API is running but MongoDB failed. Set MONGO_URI in Vercel → Settings → Environment Variables, and allow your cluster IP in Atlas.";
+          } else if (!r.ok) {
+            msg = `API returned ${r.status}. Check Vercel → Deployments → Functions logs.`;
+          }
+        } catch {
+          msg = import.meta.env.PROD
+            ? "API not reachable. Confirm the Vercel project root is mern-app and redeploy after the latest push."
+            : "Could not reach the API. Start it with: cd mern-app/server && npm run dev";
+        }
+        setError(msg);
+      }
+    })();
   }, []);
 
   const refreshSubjects = useCallback(() => {
@@ -57,7 +76,7 @@ export default function App() {
         {!subjects && !error && <div className="loading">Loading content…</div>}
 
         {subjects && view.name === "home" && (
-          <Home subjects={subjects} totalQ={totalQ} onPick={go} dueCount={store.dueKeys().length} />
+          <Home subjects={subjects} totalQ={totalQ} onPick={go} dueCount={store.dueKeys().length} store={store} />
         )}
 
         {subjects && view.name === "notesList" && (

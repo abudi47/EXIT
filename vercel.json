@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm install --prefix server && npm install --prefix client",
+  "installCommand": "npm install && npm install --prefix server && npm install --prefix client",
   "buildCommand": "npm run build --prefix client",
   "outputDirectory": "client/dist",
   "framework": null,
@@ -11,7 +11,8 @@
   ],
   "functions": {
     "api/index.mjs": {
-      "maxDuration": 30
+      "maxDuration": 30,
+      "includeFiles": "server/src/**"
     }
   }
 }

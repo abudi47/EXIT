@@ -118,9 +118,9 @@ mern-app/
 |---|---|---|
 | `../quiz/data/*.json` | subjects + questions | 17 subjects · 628 Q |
 | `../notes/*.md` | **revision** notes | 17 |
-| `../new_notes/*.md` | **deep-dive** notes | 9 (programming, DSA, OOP, database, networking, OS, security, AI, SE) |
+| `../new_notes/*.md` | **deep-dive** notes | 17 (all subjects) |
 
-The other 8 subjects show "Deep dive (none)" until you add one — drop a file in `../new_notes/`, map it in `import.mjs`, and re-import.
+Every subject now has both a revision note and a deep-dive note. Deep-dives come from two naming conventions, both handled by the importer: the original 9 use descriptive filenames mapped in `DEEPDIVE_MAP`, and the rest are named `<subjectId>.md` (e.g. `04_web.md`), which the importer's generic pass loads automatically. To add or replace one, drop a `<subjectId>.md` in `../new_notes/` and re-import — no code change needed.
 
 ## 🧠 How spaced repetition works
 

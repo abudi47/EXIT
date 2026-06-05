@@ -147,6 +147,11 @@ export default function StudyMode({ subject, count, order, store, onBack, onDone
               {picked === q.answer ? "Correct!" : revealed && picked === null ? "Answer revealed." : "Not quite."}
             </strong>
             <span dangerouslySetInnerHTML={{ __html: codeify(q.explain) }} />
+            {q.tags?.includes("verify") && (
+              <span className="verify-badge" title="This answer was inferred from an exam without an official key — double-check it.">
+                ⚠ unverified answer
+              </span>
+            )}
           </div>
         )}
       </div>

@@ -291,6 +291,11 @@ function ReviewMode({ questions, answers, onBack, onExit }) {
             {ans === undefined && <div className="rev-skip">Not answered</div>}
           </div>
           <div className="rev-explain" dangerouslySetInnerHTML={{ __html: codeify(q.explain) }} />
+          {q.tags?.includes("verify") && (
+            <span className="verify-badge" title="Inferred answer — no official key in the source exam.">
+              ⚠ unverified answer
+            </span>
+          )}
         </div>
       ))}
       <button className="ghost-btn full" onClick={onExit}>

@@ -118,6 +118,11 @@ export default function Flashcards({ subjects, store, onExit }) {
             <div className="explain ok">
               <strong>Answer</strong>
               <span dangerouslySetInnerHTML={{ __html: codeify(q.explain) }} />
+              {q.tags?.includes("verify") && (
+                <span className="verify-badge" title="Inferred answer — no official key in the source exam.">
+                  ⚠ unverified answer
+                </span>
+              )}
             </div>
           </>
         )}
