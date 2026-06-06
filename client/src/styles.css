@@ -1026,6 +1026,9 @@ code {
   flex: 1;
   margin: 0;
 }
+.thumb-bar .reveal-btn {
+  margin: 0;
+}
 .primary-btn.study.bar {
   width: auto;
   flex: 1;

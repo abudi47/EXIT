@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { api } from "../lib/api.js";
 import { codeify, shuffle, haptic } from "../lib/markdown.js";
 import { useSwipe } from "../lib/hooks.js";
@@ -19,48 +19,80 @@ export default function StudyMode({ subject, count, order, store, onBack, onDone
   }, [all, count, order]);
 
   const [pos, setPos] = useState(0);
-  const [picked, setPicked] = useState(null);
-  const [revealed, setRevealed] = useState(false);
-  const [correct, setCorrect] = useState(0);
-  const [seen, setSeen] = useState(0);
+  // Per-question answer state, keyed by position, so going back/forward restores it.
+  const [responses, setResponses] = useState({}); // { [pos]: { picked: number|null, revealed: bool } }
   const [done, setDone] = useState(false);
+  const recorded = useRef(new Set()); // positions already fed to spaced repetition (record once)
 
   const q = questions[pos];
-  const answered = picked !== null || revealed;
   const key = q ? qKey(subject.subjectId, q) : null;
+  const cur = responses[pos] || null;
+  const picked = cur ? cur.picked : null;
+  const revealed = cur ? cur.revealed : false;
+  const answered = cur !== null;
+
+  // Score is derived from responses so revisiting a question never double-counts.
+  const seen = Object.keys(responses).length;
+  const correct = Object.entries(responses).filter(
+    ([p, r]) => r.picked !== null && r.picked === questions[Number(p)]?.answer
+  ).length;
+
+  const recordOnce = (ok) => {
+    if (!recorded.current.has(pos)) {
+      recorded.current.add(pos);
+      store.recordAnswer(key, ok);
+    }
+  };
 
   const choose = (oi) => {
     if (answered || !q) return;
     const ok = oi === q.answer;
     haptic(ok ? 10 : [18, 30, 18]);
-    setPicked(oi);
-    setSeen((s) => s + 1);
-    if (ok) setCorrect((c) => c + 1);
-    store.recordAnswer(key, ok);
+    setResponses((r) => ({ ...r, [pos]: { picked: oi, revealed: false } }));
+    recordOnce(ok);
   };
 
   const reveal = () => {
-    if (!answered) {
+    if (answered) return;
+    haptic();
+    setResponses((r) => ({ ...r, [pos]: { picked: null, revealed: true } }));
+    recordOnce(false);
+  };
+
+  // Hide the answer again so you can re-attempt this question.
+  // (Spaced repetition already recorded this question once, so re-answering
+  //  after peeking won't game your review schedule.)
+  const hide = () => {
+    haptic();
+    setResponses((r) => {
+      const copy = { ...r };
+      delete copy[pos];
+      return copy;
+    });
+  };
+
+  const prev = () => {
+    if (pos > 0) {
       haptic();
-      setRevealed(true);
-      setSeen((s) => s + 1);
-      store.recordAnswer(key, false);
+      setPos((p) => p - 1);
     }
   };
 
   const next = () => {
-    if (pos + 1 >= questions.length) {
-      const pct = Math.round((correct / Math.max(1, questions.length)) * 100);
-      store.recordSession(subject.subjectId, pct);
-      setDone(true);
-      return;
+    if (pos + 1 < questions.length) {
+      haptic();
+      setPos((p) => p + 1);
     }
-    setPos((p) => p + 1);
-    setPicked(null);
-    setRevealed(false);
   };
 
-  const swipe = useSwipe({ onLeft: () => answered && next() });
+  const finish = () => {
+    const pct = Math.round((correct / Math.max(1, questions.length)) * 100);
+    store.recordSession(subject.subjectId, pct);
+    haptic(20);
+    setDone(true);
+  };
+
+  const swipe = useSwipe({ onLeft: next, onRight: prev });
 
   if (!all) return <div className="loading">Loading questions…</div>;
 
@@ -90,7 +122,8 @@ export default function StudyMode({ subject, count, order, store, onBack, onDone
     );
   }
 
-  const pct = Math.round((pos / questions.length) * 100);
+  const pct = Math.round(((pos + 1) / questions.length) * 100);
+  const isLast = pos + 1 >= questions.length;
 
   return (
     <div className="runner study-runner" {...swipe}>
@@ -155,20 +188,31 @@ export default function StudyMode({ subject, count, order, store, onBack, onDone
           </div>
         )}
       </div>
-      {!answered ? (
-        <div className="thumb-bar">
-          <button className="reveal-btn wide" onClick={reveal}>
-            👁 Reveal answer
+
+      <div className="thumb-bar exam-bar">
+        <button className="nav-btn" onClick={prev} disabled={pos === 0} title="Previous">
+          ←
+        </button>
+        {!answered ? (
+          <button className="reveal-btn" onClick={reveal}>
+            👁 Reveal
           </button>
-        </div>
-      ) : (
-        <div className="thumb-bar">
-          <span className="swipe-hint">swipe ← or tap</span>
-          <button className="primary-btn study bar" onClick={next}>
-            {pos + 1 >= questions.length ? "Finish ✓" : "Next →"}
+        ) : (
+          <button className="reveal-btn" onClick={hide} title="Hide the answer and try this question again">
+            🙈 Hide
           </button>
-        </div>
-      )}
+        )}
+        {isLast ? (
+          <button className="nav-btn submit grow" onClick={finish}>
+            Finish ✓
+          </button>
+        ) : (
+          <button className="nav-btn grow" onClick={next}>
+            Next →
+          </button>
+        )}
+      </div>
+      <div className="swipe-hint center">← swipe between questions →</div>
     </div>
   );
 }
