@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { session, STUDY_KEY } from "../lib/session.js";
 
 export default function StudySetup({ subject, onBack, onStart }) {
   const [count, setCount] = useState(10);
@@ -41,7 +42,10 @@ export default function StudySetup({ subject, onBack, onStart }) {
 
         <button
           className="primary-btn study"
-          onClick={() => onStart({ subjectId: subject.subjectId, count: Math.min(count, max), order })}
+          onClick={() => {
+            session.del(STUDY_KEY); // fresh run — drop any resumable session
+            onStart({ subjectId: subject.subjectId, count: Math.min(count, max), order });
+          }}
         >
           Begin study →
         </button>

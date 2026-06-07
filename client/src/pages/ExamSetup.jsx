@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { session, EXAM_KEY } from "../lib/session.js";
 
 export default function ExamSetup({ onBack, onStart }) {
   const [time, setTime] = useState(30);
@@ -43,7 +44,13 @@ export default function ExamSetup({ onBack, onStart }) {
           </div>
         </div>
 
-        <button className="primary-btn exam" onClick={() => onStart({ time, numQ })}>
+        <button
+          className="primary-btn exam"
+          onClick={() => {
+            session.del(EXAM_KEY); // fresh exam — drop any resumable session
+            onStart({ time, numQ });
+          }}
+        >
           Start exam →
         </button>
       </div>

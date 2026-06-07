@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { api } from "../lib/api.js";
 import { codeify, shuffle, haptic } from "../lib/markdown.js";
 import { useSwipe } from "../lib/hooks.js";
 import { qKey } from "../lib/store.js";
+import { session, EXAM_KEY } from "../lib/session.js";
 
 // Build a weighted exam set from the full bank, mirroring blueprint weights.
 function buildExam(bank, subjects, numQ) {
@@ -23,31 +24,65 @@ function buildExam(bank, subjects, numQ) {
 }
 
 export default function ExamMode({ time, numQ, subjects, store, onExit }) {
-  const [bank, setBank] = useState(null);
-  useEffect(() => {
-    api.allQuestions().then(setBank);
-  }, []);
-
-  const questions = useMemo(
-    () => (bank ? buildExam(bank, subjects, numQ) : []),
-    [bank, subjects, numQ]
-  );
-
+  const [questions, setQuestions] = useState([]);
+  const [ready, setReady] = useState(false);
   const [answers, setAnswers] = useState({});
   const [pos, setPos] = useState(0);
   const [submitted, setSubmitted] = useState(false);
+  // Absolute deadline (ms) instead of a counter, so the timer survives a refresh.
+  const [deadline, setDeadline] = useState(0); // 0 = no time limit
   const [left, setLeft] = useState(time * 60);
   const [navOpen, setNavOpen] = useState(false);
 
+  // Build the exam — or resume a saved one after a refresh.
   useEffect(() => {
-    if (time === 0 || submitted || !bank) return;
-    if (left <= 0) {
-      setSubmitted(true);
-      return;
-    }
-    const id = setTimeout(() => setLeft((l) => l - 1), 1000);
-    return () => clearTimeout(id);
-  }, [left, time, submitted, bank]);
+    let alive = true;
+    api.allQuestions().then((bank) => {
+      if (!alive) return;
+      const saved = session.get(EXAM_KEY);
+      if (
+        saved &&
+        saved.numQ === numQ &&
+        saved.time === time &&
+        Array.isArray(saved.questions) &&
+        saved.questions.length
+      ) {
+        setQuestions(saved.questions);
+        setAnswers(saved.answers || {});
+        setPos(saved.pos || 0);
+        setDeadline(saved.deadline || 0);
+      } else {
+        const built = buildExam(bank, subjects, numQ);
+        setQuestions(built);
+        setAnswers({});
+        setPos(0);
+        setDeadline(time > 0 ? Date.now() + time * 60 * 1000 : 0);
+      }
+      setReady(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist progress so a refresh resumes exactly here.
+  useEffect(() => {
+    if (!ready || submitted) return;
+    session.set(EXAM_KEY, { numQ, time, questions, answers, pos, deadline });
+  }, [ready, answers, pos, submitted]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Deadline-driven countdown (accurate across refreshes).
+  useEffect(() => {
+    if (!ready || time === 0 || submitted || !deadline) return;
+    const tick = () => {
+      const l = Math.max(0, Math.round((deadline - Date.now()) / 1000));
+      setLeft(l);
+      if (l <= 0) setSubmitted(true);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [ready, deadline, time, submitted]);
 
   const pick = (oi) => {
     haptic();
@@ -69,11 +104,12 @@ export default function ExamMode({ time, numQ, subjects, store, onExit }) {
       (questions.filter((q, i) => answers[i] === q.answer).length / Math.max(1, questions.length)) * 100
     );
     store.recordSession("__exam__", pct);
+    session.del(EXAM_KEY);
     haptic(20);
     setSubmitted(true);
   };
 
-  if (!bank) return <div className="loading">Building your exam…</div>;
+  if (!ready) return <div className="loading">Building your exam…</div>;
 
   if (submitted) {
     return <ExamResults questions={questions} answers={answers} onExit={onExit} />;
@@ -90,7 +126,10 @@ export default function ExamMode({ time, numQ, subjects, store, onExit }) {
         <button
           className="back small"
           onClick={() => {
-            if (confirm("Leave the exam? Progress will be lost.")) onExit();
+            if (confirm("Leave the exam? Progress will be lost.")) {
+              session.del(EXAM_KEY);
+              onExit();
+            }
           }}
         >
           ← Quit

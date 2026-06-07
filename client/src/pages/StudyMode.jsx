@@ -1,28 +1,71 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "../lib/api.js";
 import { codeify, shuffle, haptic } from "../lib/markdown.js";
 import { useSwipe } from "../lib/hooks.js";
 import { qKey } from "../lib/store.js";
+import { session, STUDY_KEY } from "../lib/session.js";
 
 export default function StudyMode({ subject, count, order, store, onBack, onDone }) {
-  const [all, setAll] = useState(null);
-
-  useEffect(() => {
-    api.questions(subject.subjectId).then(setAll);
-  }, [subject.subjectId]);
-
-  const questions = useMemo(() => {
-    if (!all) return [];
-    let qs = all.map((q, qi) => ({ ...q, _i: qi }));
-    if (order === "shuffle") qs = shuffle(qs);
-    return qs.slice(0, count);
-  }, [all, count, order]);
-
+  const [questions, setQuestions] = useState([]);
+  const [ready, setReady] = useState(false);
   const [pos, setPos] = useState(0);
   // Per-question answer state, keyed by position, so going back/forward restores it.
   const [responses, setResponses] = useState({}); // { [pos]: { picked: number|null, revealed: bool } }
   const [done, setDone] = useState(false);
   const recorded = useRef(new Set()); // positions already fed to spaced repetition (record once)
+
+  // Build the question set — or resume a saved session after a refresh.
+  useEffect(() => {
+    let alive = true;
+    api.questions(subject.subjectId).then((all) => {
+      if (!alive) return;
+      const saved = session.get(STUDY_KEY);
+      if (
+        saved &&
+        saved.subjectId === subject.subjectId &&
+        saved.count === count &&
+        saved.order === order &&
+        Array.isArray(saved.questions) &&
+        saved.questions.length
+      ) {
+        setQuestions(saved.questions);
+        setPos(saved.pos || 0);
+        setResponses(saved.responses || {});
+        recorded.current = new Set(saved.recorded || Object.keys(saved.responses || {}).map(Number));
+      } else {
+        let qs = all.map((q, qi) => ({ ...q, _i: qi }));
+        if (order === "shuffle") qs = shuffle(qs);
+        qs = qs.slice(0, count);
+        setQuestions(qs);
+        setPos(0);
+        setResponses({});
+        recorded.current = new Set();
+      }
+      setReady(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [subject.subjectId, count, order]);
+
+  // Persist progress on every change so a refresh resumes exactly here.
+  useEffect(() => {
+    if (!ready || done) return;
+    session.set(STUDY_KEY, {
+      subjectId: subject.subjectId,
+      count,
+      order,
+      questions,
+      pos,
+      responses,
+      recorded: [...recorded.current],
+    });
+  }, [ready, pos, responses, done]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const exit = () => {
+    session.del(STUDY_KEY);
+    onBack();
+  };
 
   const q = questions[pos];
   const key = q ? qKey(subject.subjectId, q) : null;
@@ -88,13 +131,14 @@ export default function StudyMode({ subject, count, order, store, onBack, onDone
   const finish = () => {
     const pct = Math.round((correct / Math.max(1, questions.length)) * 100);
     store.recordSession(subject.subjectId, pct);
+    session.del(STUDY_KEY);
     haptic(20);
     setDone(true);
   };
 
   const swipe = useSwipe({ onLeft: next, onRight: prev });
 
-  if (!all) return <div className="loading">Loading questions…</div>;
+  if (!ready) return <div className="loading">Loading questions…</div>;
 
   if (done) {
     const pct = Math.round((correct / Math.max(1, questions.length)) * 100);
@@ -128,7 +172,7 @@ export default function StudyMode({ subject, count, order, store, onBack, onDone
   return (
     <div className="runner study-runner" {...swipe}>
       <div className="runner-top">
-        <button className="back small" onClick={onBack}>
+        <button className="back small" onClick={exit}>
           ← Exit
         </button>
         <div className="runner-meta">

@@ -3,6 +3,7 @@ import { api } from "./lib/api.js";
 import { useTheme } from "./lib/hooks.js";
 import { useStore } from "./lib/store.js";
 import { haptic } from "./lib/markdown.js";
+import { session, VIEW_KEY } from "./lib/session.js";
 
 import Home from "./pages/Home.jsx";
 import SubjectPicker from "./pages/SubjectPicker.jsx";
@@ -20,7 +21,8 @@ export default function App() {
   const { theme, toggle } = useTheme();
   const store = useStore();
   const [subjects, setSubjects] = useState(null);
-  const [view, setView] = useState({ name: "home" });
+  // Restore the last screen so an accidental refresh keeps your place.
+  const [view, setView] = useState(() => session.get(VIEW_KEY) || { name: "home" });
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -55,8 +57,18 @@ export default function App() {
 
   const go = useCallback((v) => {
     setView(v);
+    session.set(VIEW_KEY, v);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
+
+  // If a restored view points at a subject that no longer exists, go home.
+  useEffect(() => {
+    if (!subjects) return;
+    const needsSubject = ["notes", "studySetup", "study"].includes(view.name);
+    if (needsSubject && !subjects.find((s) => s.subjectId === view.subjectId)) {
+      go({ name: "home" });
+    }
+  }, [subjects]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalQ = subjects ? subjects.reduce((s, x) => s + x.questionCount, 0) : 0;
 
